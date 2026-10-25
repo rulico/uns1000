@@ -957,7 +957,7 @@ function avHash(n){let h=7;for(const ch of String(n||""))h=(h*31+ch.charCodeAt(0
    Para migrar (ex.: GitHub + outro serviço), basta reimplementar NET com os mesmos métodos. */
 /* ===== som: efeitos e trilha sintetizados (Web Audio), sem arquivos ===== */
 const SND={ctx:null,master:null,fx:null,mus:null,on:true,music:false,timer:null,step:0,next:0,
-  init(){try{const v=localStorage.getItem("seila-som");if(v==="0")this.on=false;this.music=localStorage.getItem("seila-musica")==="1";}catch(e){}},
+  init(){try{const v=localStorage.getItem("seila-som");if(v==="0")this.on=false;this.music=localStorage.getItem("seila-musica")!=="0";}catch(e){}},
   save(){try{localStorage.setItem("seila-som",this.on?"1":"0");localStorage.setItem("seila-musica",this.music?"1":"0");}catch(e){}},
   ensure(){if(this.ctx){if(this.ctx.state==="suspended")this.ctx.resume().catch(()=>{});return true;}
     const C=window.AudioContext||window.webkitAudioContext;if(!C)return false;
@@ -1013,7 +1013,8 @@ const SND={ctx:null,master:null,fx:null,mus:null,on:true,music:false,timer:null,
   pathFor(ph){const T=window.SEILA_TRILHAS||{};for(const p of [T[ph],window.SEILA_TRILHA])if(p&&!this.bad.has(p))return p;return null;},
   fadeTo(el,to,ms,pauseEnd){clearInterval(el._ft);const from=el.volume,t0=Date.now();
     el._ft=setInterval(()=>{const k=Math.min(1,(Date.now()-t0)/ms);el.volume=Math.max(0,Math.min(1,from+(to-from)*k));if(k>=1){clearInterval(el._ft);if(pauseEnd&&to===0)el.pause();}},50);},
-  musicTick(){if(!this.music||!this.ctx||(typeof mp!=="undefined"&&mp.role==="player"))return;
+  hostOn:false,
+  musicTick(){if(!this.music||!this.hostOn||!this.ctx||(typeof mp!=="undefined"&&mp.role==="player"))return;
     const ph=typeof musicPhase==="function"?musicPhase():"intro",path=this.pathFor(ph);
     if(!path){this.switchTo(null);this.startSynth();return;}
     this.stopSynth();if(path!==this.curPath)this.switchTo(path);},
@@ -1395,7 +1396,7 @@ const mp={
   rename(){this.prevName=this.name;this.name="";NET.set({role:null,name:null});this.renderPlayer(true);}
 };
 $("beplayer").onclick=()=>{SND.stopMusic();mp.openPlayer();};
-$("behost").onclick=()=>showStep(1);
+$("behost").onclick=()=>{SND.hostOn=true;SND.ensure();SND.musicTick();showStep(1);};
 /* ===== salas abandonadas: depois de 1 h aberta, pergunta; sem resposta em 5 min, encerra ===== */
 const IDLE={after:(window.SEILA_IDLE&&window.SEILA_IDLE.after)||3600e3,grace:(window.SEILA_IDLE&&window.SEILA_IDLE.grace)||300e3,until:0};
 function closeRoom(why){const c=mp.code;$("idle").hidden=true;IDLE.until=0;
