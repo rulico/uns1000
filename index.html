@@ -1,7 +1,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1C0633">
-<script>window.SEILA_CSV="perguntas.csv";window.SEILA_TRILHA="trilha.mp3";</script>
+<script>window.SEILA_CSV="perguntas.csv";window.SEILA_TRILHA="trilha/trilha.mp3";window.SEILA_TRILHAS={intro:"trilha/intro.mp3",palpite:"trilha/palpite.mp3",apostas:"trilha/apostas.mp3",placar:"trilha/placar.mp3"};</script>
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1" onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';document.head.appendChild(s)"></script>
 <title>Sei lá.. uns 1000!?</title>
@@ -537,6 +537,19 @@ body.celrev .ans .cur{font-size:clamp(13px,calc(1.15*var(--vw)),19px)}
 .ptm[hidden]{display:none}
 
 .pread.unit{font-weight:700;color:var(--muted);text-transform:lowercase;letter-spacing:.02em}
+
+.tmr{pointer-events:auto;cursor:pointer}
+.tmr .tps{position:absolute;top:100%;margin-top:4px;font:800 10px/1 var(--body);letter-spacing:.14em;color:var(--muted);font-style:normal;display:none;white-space:nowrap}
+.tmr.paused .tps{display:block}.tmr.paused .tf{stroke:var(--muted)}.tmr.paused b{color:var(--muted);animation:none}
+#tpause{min-width:0;padding-inline:.8em}
+
+.idle{position:fixed;inset:0;z-index:12;display:grid;place-items:center;background:rgba(11,0,20,.78);padding:24px}
+.idle[hidden]{display:none}
+.idlebox{max-width:640px;background:var(--plum);border:4px solid var(--gold);border-radius:28px;padding:clamp(22px,3vw,40px);text-align:center;box-shadow:0 0 0 6px var(--line),0 20px 60px rgba(0,0,0,.6)}
+.idlebox h2{font-family:var(--display);font-weight:400;text-transform:uppercase;color:var(--gold);font-size:clamp(26px,2.6vw,44px);line-height:1.1;margin:0 0 .4em}
+.idlebox p{color:var(--ink);font-size:clamp(16px,1.4vw,22px);line-height:1.45;margin:0 0 1.2em}
+.idlebox b{color:var(--gold);font-variant-numeric:tabular-nums}
+.idlebox .row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
 </style>
 
 <main class="stage">
@@ -561,6 +574,7 @@ body.celrev .ans .cur{font-size:clamp(13px,calc(1.15*var(--vw)),19px)}
     <div class="group">
       <button class="btn" id="openPick">Categorias</button>
       <button class="btn" id="openImp">Importar</button>
+      <button class="btn" id="tpause" hidden>⏸</button>
       <button class="btn sndb" data-k="fx" aria-pressed="true">🔊</button>
       <button class="btn sndb" data-k="mus" aria-pressed="false">🎵</button>
       <button class="btn" id="fs">Tela cheia</button>
@@ -647,7 +661,14 @@ body.celrev .ans .cur{font-size:clamp(13px,calc(1.15*var(--vw)),19px)}
 </div>
 
 <button class="fab" id="fab" aria-label="Avançar" title="Avançar" hidden>›</button>
-<div class="tmr" id="tmr" hidden><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="17" class="tb"/><circle cx="20" cy="20" r="17" class="tf" id="tmrf"/></svg><b id="tmrn">0</b></div>
+<div class="tmr" id="tmr" hidden role="button" tabindex="-1" title="Pausar ou retomar o tempo"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="17" class="tb"/><circle cx="20" cy="20" r="17" class="tf" id="tmrf"/></svg><b id="tmrn">0</b><i class="tps" aria-hidden="true">PAUSADO</i></div>
+<div class="idle" id="idle" hidden role="alertdialog" aria-labelledby="idleT">
+  <div class="idlebox">
+    <h2 id="idleT">A sala <span id="idleC"></span> ainda está em uso?</h2>
+    <p>Ela está aberta há mais de 1 hora. Se ninguém responder, ela será encerrada em <b id="idleN">5:00</b>.</p>
+    <div class="row"><button class="btn" id="idleEnd">Encerrar agora</button><button class="start" id="idleKeep">Manter aberta</button></div>
+  </div>
+</div>
 <div class="board" id="board" hidden role="dialog" aria-labelledby="btitle">
   <div class="bwrap">
     <p class="bsub" id="bsub"></p>
@@ -839,6 +860,7 @@ sheet.addEventListener("click",e=>{if(e.target===sheet)sheet.hidden=true;});
 document.addEventListener("keydown",e=>{
   if(!$("player").hidden)return;
   const onBtn=e.target&&(e.target.tagName==="BUTTON"||e.target.tagName==="INPUT"||e.target.tagName==="TEXTAREA");
+  if(!$("idle").hidden){if(e.key==="Enter"&&!onBtn){e.preventDefault();$("idleKeep").click();}return;}
   if(!$("board").hidden){if(e.key==="Escape")mp.hideBoard();else if(e.key==="Enter"&&!onBtn){e.preventDefault();$("bnext").click();}return;}
   if(!pick.hidden){if(e.key==="Escape"&&deck.length)pick.hidden=true;
     else if(e.key==="Enter"&&!onBtn){e.preventDefault();const b=!$("step0").hidden?$("behost"):!$("step1").hidden?$("toStep2"):$("start");if(b&&!b.disabled)b.click();}
@@ -959,8 +981,9 @@ const SND={ctx:null,master:null,fx:null,mus:null,on:true,music:false,timer:null,
     const v=o.vol==null?.2:o.vol;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+(o.att||.003));g.gain.exponentialRampToValueAtTime(.0008,t+dur);
     s.connect(f);f.connect(g);g.connect(o.dest||this.fx);s.start(t,Math.random()*.5);s.stop(t+dur+.05);},
   chord(fs,t,dur,o={}){fs.forEach((f,k)=>this.tone(f,t+(o.strum||0)*k,dur,Object.assign({type:"sawtooth",lp:2200,vol:.12,att:.02},o)));},
-  duck(sec){if(this.audioOn&&this.audio){this.fadeAudio(.08,150);clearTimeout(this.duckT);this.duckT=setTimeout(()=>{if(this.audioOn)this.fadeAudio(.38,900);},sec*1000);return;}
-    if(!this.mus||!this.music)return;const g=this.mus.gain,t=this.ctx.currentTime;g.cancelScheduledValues(t);g.setValueAtTime(g.value,t);g.linearRampToValueAtTime(.05,t+.1);g.setValueAtTime(.05,t+sec);g.linearRampToValueAtTime(.5,t+sec+.8);},
+  duck(sec){const el=this.curPath&&this.els[this.curPath];
+    if(el){this.ducked=true;this.fadeTo(el,.08,150);clearTimeout(this.duckT);this.duckT=setTimeout(()=>{this.ducked=false;const e2=this.curPath&&this.els[this.curPath];if(e2)this.fadeTo(e2,this.level,900);},sec*1000);return;}
+    if(!this.mus||!this.music||!this.timer)return;const g=this.mus.gain,t=this.ctx.currentTime;g.cancelScheduledValues(t);g.setValueAtTime(g.value,t);g.linearRampToValueAtTime(.05,t+.1);g.setValueAtTime(.05,t+sec);g.linearRampToValueAtTime(.5,t+sec+.8);},
   N:{C4:261.6,D4:293.7,E4:329.6,F4:349.2,G4:392,A4:440,B4:493.9,C5:523.3,D5:587.3,E5:659.3,G5:784,A5:880,C6:1046.5,E6:1318.5,G6:1568},
   play(name){if(!this.on||!this.ensure())return;const t=this.ctx.currentTime+.01,N=this.N;
     switch(name){
@@ -985,18 +1008,26 @@ const SND={ctx:null,master:null,fx:null,mus:null,on:true,music:false,timer:null,
       case "suave":this.tone(N.G5,t,.35,{type:"sine",vol:.18});break;
     }},
   /* trilha: swing de auditório (ii–V–I–VI), agendada à frente */
-  startMusic(){if(!this.ctx||this.timer||this.audioOn||(typeof mp!=="undefined"&&mp.role==="player"))return;
-    if(this.fileOk!==false&&window.SEILA_TRILHA){
-      if(!this.audio){const a=new Audio();a.src=window.SEILA_TRILHA;a.loop=true;a.preload="auto";a.volume=0;this.audio=a;
-        a.addEventListener("error",()=>{this.fileOk=false;this.audioOn=false;if(this.music)this.startMusic();},{once:true});}
-      this.audioOn=true;const a=this.audio;
-      a.play().then(()=>{this.fileOk=true;this.fadeAudio(.38,1200);}).catch(()=>{if(this.audio&&this.audio.error){this.fileOk=false;this.audioOn=false;if(this.music)this.startMusic();}else{this.audioOn=false;}});
-      return;}const g=this.mus.gain,t=this.ctx.currentTime;g.cancelScheduledValues(t);g.setValueAtTime(0,t);g.linearRampToValueAtTime(.5,t+1.5);
+  /* trilhas em arquivo por momento do jogo (intro, palpite, apostas, placar); sem arquivo, usa trilha.mp3; sem nenhum, a sintetizada */
+  els:{},bad:new Set(),curPath:null,level:.38,
+  pathFor(ph){const T=window.SEILA_TRILHAS||{};for(const p of [T[ph],window.SEILA_TRILHA])if(p&&!this.bad.has(p))return p;return null;},
+  fadeTo(el,to,ms,pauseEnd){clearInterval(el._ft);const from=el.volume,t0=Date.now();
+    el._ft=setInterval(()=>{const k=Math.min(1,(Date.now()-t0)/ms);el.volume=Math.max(0,Math.min(1,from+(to-from)*k));if(k>=1){clearInterval(el._ft);if(pauseEnd&&to===0)el.pause();}},50);},
+  musicTick(){if(!this.music||!this.ctx||(typeof mp!=="undefined"&&mp.role==="player"))return;
+    const ph=typeof musicPhase==="function"?musicPhase():"intro",path=this.pathFor(ph);
+    if(!path){this.switchTo(null);this.startSynth();return;}
+    this.stopSynth();if(path!==this.curPath)this.switchTo(path);},
+  switchTo(path){const old=this.curPath?this.els[this.curPath]:null;if(old)this.fadeTo(old,0,700,true);this.curPath=path;if(!path)return;
+    let el=this.els[path];
+    if(!el){el=new Audio();el.src=path;el.loop=true;el.preload="auto";el.volume=0;this.els[path]=el;
+      el.addEventListener("error",()=>{this.bad.add(path);if(this.curPath===path){this.curPath=null;this.musicTick();}},{once:true});}
+    el.volume=0;el.play().then(()=>{if(this.curPath===path)this.fadeTo(el,this.ducked?.08:this.level,900);else el.pause();})
+      .catch(()=>{if(el.error){this.bad.add(path);}if(this.curPath===path)this.curPath=null;});},
+  startMusic(){if(!this.ctx||(typeof mp!=="undefined"&&mp.role==="player"))return;this.musicTick();},
+  startSynth(){if(this.timer)return;const g=this.mus.gain,t=this.ctx.currentTime;g.cancelScheduledValues(t);g.setValueAtTime(0,t);g.linearRampToValueAtTime(.5,t+1.5);
     this.next=t+.1;this.step=0;this.timer=setInterval(()=>this.sched(),60);},
-  fadeAudio(to,ms){const a=this.audio;if(!a)return;clearInterval(this.fadeT);const from=a.volume,t0=Date.now();
-    this.fadeT=setInterval(()=>{const k=Math.min(1,(Date.now()-t0)/ms);a.volume=Math.max(0,Math.min(1,from+(to-from)*k));if(k>=1){clearInterval(this.fadeT);if(to===0&&!this.audioOn)a.pause();}},50);},
-  stopMusic(){if(this.audioOn){this.audioOn=false;this.fadeAudio(0,500);}
-    if(!this.timer)return;clearInterval(this.timer);this.timer=null;const g=this.mus.gain,t=this.ctx.currentTime;g.cancelScheduledValues(t);g.setValueAtTime(g.value,t);g.linearRampToValueAtTime(0,t+.4);},
+  stopSynth(){if(!this.timer)return;clearInterval(this.timer);this.timer=null;const g=this.mus.gain,t=this.ctx.currentTime;g.cancelScheduledValues(t);g.setValueAtTime(g.value,t);g.linearRampToValueAtTime(0,t+.4);},
+  stopMusic(){this.switchTo(null);if(this.ctx)this.stopSynth();},
   sched(){const c=this.ctx,beat=60/116;const prog=[[146.8,[293.7,349.2,440,523.3]],[196,[293.7,349.2,392,493.9]],[130.8,[329.6,392,493.9,523.3]],[110,[277.2,329.6,392,440]]];
     while(this.next<c.currentTime+.25){const st=this.step%32,bar=Math.floor(this.step/8)%4,[root,ch]=prog[bar],pos=st%8,swing=pos%2?beat*.17:0,t=this.next+swing,d=this.mus;
       if(pos%2===0){const walk=[1,1.25,1.5,1.335][pos/2];this.tone(root*walk/2*2,t,beat*.9,{type:"triangle",vol:.32,dest:d,lp:900});}
@@ -1050,7 +1081,7 @@ const SBNET={sb:null,net:null,me:"",L:null,R:null,
     ch.subscribe(st=>{const ok=st==="SUBSCRIBED";s.ok=ok;if(ok){this.push(s,true);s.waits.splice(0).forEach(f=>f());}
       if(onStatus&&(ok||st==="CHANNEL_ERROR"||st==="TIMED_OUT"||st==="CLOSED"))onStatus(ok);});
     return s;},
-  push(s,now){clearTimeout(s.t);const go=()=>{if(s.ok)s.ch.track({p:s.mine,t:Date.now()}).catch(()=>{});};if(now)go();else s.t=setTimeout(go,120);},
+  push(s,now){clearTimeout(s.t);const go=()=>{if(s.ok&&(s===this.R||s===this.L))s.ch.track({p:s.mine,t:Date.now()}).catch(()=>{});};if(now)go();else s.t=setTimeout(go,120);},
   set(o,lobby){const s=(lobby||!this.R)?this.L:this.R;if(!s)return;const m=Object.assign({},s.mine,o);for(const k in m)if(m[k]===null||m[k]===undefined)delete m[k];s.mine=m;
     const i=s.list.findIndex(p=>p.sameTab);const me={id:this.me,sameTab:true,presence:m,updatedAt:Date.now()};if(i>=0)s.list[i]=me;else s.list.push(me);
     this.push(s,false);this.net.fire();},
@@ -1092,7 +1123,7 @@ const mp={
     if(this.code)return;
     let c="";try{c=sessionStorage.getItem("palpite-certo-sala")||"";}catch(e){}
     if(!/^[A-Z]{4}$/.test(c))c=newCode();
-    this.code=c;try{sessionStorage.setItem("palpite-certo-sala",c);}catch(e){}
+    this.code=c;this.openedAt=Date.now();try{sessionStorage.setItem("palpite-certo-sala",c);}catch(e){}
     NET.lobbySet({role:"tv",code:c});
     NET.enter(c).then(()=>this.push());
     this.drawRoom();
@@ -1249,7 +1280,7 @@ const mp={
       else if(!revealed){st.ph="vote";st.fx=this.fichas();st.an=anon?1:0;st.opts=this.opts().slice(0,21).map(o=>[o.key,o.g,anon?[]:o.names.slice(0,4)]);}
       else{st.ph="rev";const r=this.results[st.qid];st.a=numOf(it);st.u=String(it.u||"").slice(0,60);
         if(r){st.win=r.winKey;st.opts=r.opts.slice(0,21).map(o=>[o.key,o.g,o.names.slice(0,4)]);st.dl=Object.values(r.deltas).map(x=>[x.n,x.d]);}}}
-    if(typeof TIMER!=="undefined"){timerSync();if(TIMER.key){st.tk=TIMER.key;st.tm=Math.max(0,Math.round((TIMER.end-Date.now())/1000));}}
+    if(typeof TIMER!=="undefined"){timerSync();if(TIMER.key){st.tk=TIMER.key+(TIMER.paused?"|p":"|"+Math.round(TIMER.end/1000));st.tm=Math.max(0,Math.round((TIMER.end-Date.now())/1000));st.tp=TIMER.paused?1:0;}}
     st.sc=this.ranking().slice(0,MAXP).map(r=>[r.n,r.s]);
     st.av={};this.ranking().concat(this.players().map(p=>({n:p.presence.name}))).slice(0,MAXP*2).forEach(r=>{st.av[String(r.n).slice(0,24)]=this.avOf(r.n);});
     NET.set({role:"tv",code:this.code,st});
@@ -1272,7 +1303,7 @@ const mp={
     if(this.role!=="player")return;
     const st=this.pcode?this.tv():null, body=$("pbody");
     const key=JSON.stringify([this.name,this.pcode,NET.ready,this.pcode?0:this.openRooms(),st,this.sent,this.bets,this.editing]);
-    if(st&&st.tk&&(st.ph==="open"||st.ph==="vote"||st.ph==="board")){if(st.tk!==this.tkKey){this.tkKey=st.tk;this.tkEnd=Date.now()+(st.tm||0)*1000;}}else{this.tkKey="";this.tkEnd=0;}
+    if(st&&st.tk&&(st.ph==="open"||st.ph==="vote"||st.ph==="rev"||st.ph==="board")){if(st.tk!==this.tkKey){this.tkKey=st.tk;this.tkEnd=Date.now()+(st.tm||0)*1000;}this.tkPaused=!!st.tp;this.tkLeft=st.tm||0;}else{this.tkKey="";this.tkEnd=0;this.tkPaused=false;}
     if(!force&&key===this.lastKey)return; this.lastKey=key;
     if(st){const ph=st.ph+"|"+(st.qid||""),meS=st.sc?((st.sc.find(r=>nameKey(r[0])===nameKey(this.name))||[])[1]||0):0;
       if(this.sph&&ph!==this.sph){if(st.ph==="open")SND.play("vez");else if(st.ph==="vote")SND.play("apostas");else if(st.ph==="rev")SND.play("suave");
@@ -1300,6 +1331,8 @@ const mp={
     }
     const swap='<button class="link" id="pswap">Trocar de sala</button>';
     const bindSwap=()=>{const b=$("pswap");if(b)b.onclick=()=>{this.pcode="";try{sessionStorage.removeItem("palpite-certo-sala-jogador");}catch(e){}NET.set({role:null,code:null});NET.leave();this.renderPlayer(true);};};
+    if(st){this.hadTv=this.pcode;}
+    if(!st&&this.hadTv===this.pcode){body.innerHTML='<div class="pcard"><h2>A sala '+esc(this.pcode)+' foi encerrada</h2><p>A TV fechou a sala ou saiu do jogo. Se ela voltar, você entra de novo automaticamente.</p></div>'+swap;bindSwap();return;}
     if(!st){body.innerHTML='<div class="pcard"><h2>Procurando a TV da sala '+esc(this.pcode)+'…</h2><p>Confira o código na TV. A TV precisa estar no modo <b>Com celulares</b>.</p></div>'+swap;bindSwap();return;}
     if(st.pl&&st.pl.length>=MAXP&&!st.pl.some(n=>nameKey(n)===nameKey(this.name))){body.innerHTML='<div class="pcard"><h2>Sala cheia</h2><p>Esta partida já tem '+MAXP+' jogadores.</p></div>'+swap;bindSwap();return;}
     const avs=st.av||{}, pav=(n,c)=>avatarSVG(typeof avs[n]==="number"?avs[n]:avHash(n),c);
@@ -1363,38 +1396,67 @@ const mp={
 };
 $("beplayer").onclick=()=>{SND.stopMusic();mp.openPlayer();};
 $("behost").onclick=()=>showStep(1);
+/* ===== salas abandonadas: depois de 1 h aberta, pergunta; sem resposta em 5 min, encerra ===== */
+const IDLE={after:(window.SEILA_IDLE&&window.SEILA_IDLE.after)||3600e3,grace:(window.SEILA_IDLE&&window.SEILA_IDLE.grace)||300e3,until:0};
+function closeRoom(why){const c=mp.code;$("idle").hidden=true;IDLE.until=0;
+  if(c){NET.lobbySet({role:null,code:null});NET.set({role:null,st:null,code:null});NET.leave();}
+  mp.code="";mp.openedAt=0;try{sessionStorage.removeItem("palpite-certo-sala");}catch(e){}
+  $("board").hidden=true;const cf=document.querySelector(".confetti");if(cf)cf.remove();
+  openPick(false,true);if(c)toast("Sala "+c+" encerrada"+(why?" "+why:""));}
+function idleTick(){
+  const box=$("idle");
+  if(!mp.code||mode!=="cel"||mp.role==="player"){box.hidden=true;IDLE.until=0;return;}
+  if(box.hidden){if(mp.openedAt&&Date.now()-mp.openedAt>=IDLE.after){IDLE.until=Date.now()+IDLE.grace;$("idleC").textContent=mp.code;box.hidden=false;
+      if(typeof TIMER!=="undefined"&&TIMER.key&&!TIMER.paused)timerToggle();SND.play("vez");$("idleKeep").focus({preventScroll:true});}else return;}
+  const left=Math.max(0,IDLE.until-Date.now()),m=Math.floor(left/60000),sec=Math.ceil(left/1000)%60;
+  $("idleN").textContent=(Math.ceil(left/1000)>=60?m+":"+String(sec===60?0:sec).padStart(2,"0"):"0:"+String(Math.ceil(left/1000)).padStart(2,"0"));
+  if(left<=0)closeRoom("por falta de resposta");}
+setInterval(idleTick,1000);
+$("idleKeep").onclick=()=>{$("idle").hidden=true;IDLE.until=0;mp.openedAt=Date.now();SND.play("tick");if(TIMER.key&&TIMER.paused)timerToggle();};
+$("idleEnd").onclick=()=>closeRoom("");
 /* ===== timer ===== */
 setInterval(()=>{const el=$("ptm");if(!el)return;if(mp.role!=="player"||!mp.tkEnd){el.hidden=true;return;}
-  const sec=Math.max(0,Math.ceil((mp.tkEnd-Date.now())/1000));el.hidden=false;el.textContent="⏱ "+sec+"s";el.classList.toggle("low",sec<=5);},250);
-var TIMER={key:"",end:0,total:0,fired:"",lastSec:-1};
+  const sec=mp.tkPaused?mp.tkLeft:Math.max(0,Math.ceil((mp.tkEnd-Date.now())/1000));el.hidden=false;el.textContent=(mp.tkPaused?"⏸ ":"⏱ ")+sec+"s";el.classList.toggle("low",!mp.tkPaused&&sec<=5);},250);
+var TIMER={key:"",end:0,total:0,fired:"",lastSec:-1,paused:false,left:0};
 function timerDur(kind){const n=mode==="cel"?mp.players().length:4,k=Math.max(0,Math.min(1,(n-2)/8));
   if(kind==="o")return Math.round(timerMode===1?20+10*k:30+10*k);
   if(kind==="v")return Math.round(timerMode===1?10+5*k:15+5*k);
+  if(kind==="r")return timerMode===1?8:12;
   return timerMode===1?5:10;}
 function timerKind(){if(!timerMode||!$("player").hidden||!sheet.hidden||!rep.hidden)return "";
   if(!$("board").hidden)return mp.over?"":"b";
   if(!pick.hidden||!deck.length)return "";
-  if(revealed)return "";
+  if(revealed)return "r";
   return (mode==="cel"&&mp.cph==="vote")?"v":"o";}
 function timerSync(){
   const kind=timerKind(),key=kind?kind+"|"+(deck[i]?keyOf(deck[i]):"")+"|"+i:"";
-  if(key!==TIMER.key){TIMER.key=key;TIMER.fired="";TIMER.lastSec=-1;if(kind){TIMER.total=timerDur(kind);TIMER.end=Date.now()+TIMER.total*1000;}}
+  if(key!==TIMER.key){TIMER.key=key;TIMER.fired="";TIMER.lastSec=-1;TIMER.paused=false;if(kind){TIMER.total=timerDur(kind);TIMER.end=Date.now()+TIMER.total*1000;}}
   const el=$("tmr");
-  if(!TIMER.key){el.hidden=true;return 0;}
+  const pb=$("tpause");
+  if(!TIMER.key){el.hidden=true;if(pb)pb.hidden=true;return 0;}
+  if(TIMER.paused)TIMER.end=Date.now()+TIMER.left;
+  if(pb){pb.hidden=false;pb.textContent=TIMER.paused?"▶":"⏸";pb.title=TIMER.paused?"Retomar o tempo (P)":"Pausar o tempo (P)";pb.setAttribute("aria-pressed",String(TIMER.paused));}
+  el.classList.toggle("paused",TIMER.paused);
   const left=Math.max(0,TIMER.end-Date.now()),sec=Math.ceil(left/1000);
   el.hidden=false;$("tmrn").textContent=sec;$("tmrf").style.strokeDashoffset=String(106.8*(1-left/(TIMER.total*1000)));el.classList.toggle("low",sec<=5);
-  if(sec!==TIMER.lastSec){if(sec<=5&&sec>0&&TIMER.lastSec!==-1)SND.play("tictac");TIMER.lastSec=sec;}
+  if(sec!==TIMER.lastSec){if(sec<=5&&sec>0&&TIMER.lastSec!==-1&&(TIMER.key[0]==="o"||TIMER.key[0]==="v"))SND.play("tictac");TIMER.lastSec=sec;}
   if(left<=0&&TIMER.fired!==TIMER.key){TIMER.fired=TIMER.key;const k=TIMER.key[0];
-    if(k!=="b")SND.play("tempo");
+    if(k==="o"||k==="v")SND.play("tempo");
     setTimeout(()=>{if(TIMER.fired!==TIMER.key)return;
       if(k==="b"){if(!$("board").hidden)$("bnext").click();}
       else if(k==="o"){if(!revealed)primary();}
-      else if(k==="v"){if(!revealed)reveal();}},k==="b"?0:700);}
+      else if(k==="v"){if(!revealed)reveal();}
+      else if(k==="r"){if(revealed&&$("board").hidden&&pick.hidden)advance();}},(k==="b"||k==="r")?0:700);}
   return sec;}
 setInterval(()=>{const before=TIMER.key;timerSync();if(TIMER.key!==before)mp.push();},250);
+function timerToggle(){if(!TIMER.key)return;if(TIMER.paused){TIMER.paused=false;TIMER.end=Date.now()+TIMER.left;}else{TIMER.left=Math.max(0,TIMER.end-Date.now());TIMER.paused=true;}
+  SND.play("tick");timerSync();mp.push();}
+$("tpause").onclick=()=>{timerToggle();const t=revealed?$("next"):$("revealBtn");if(t)t.focus({preventScroll:true});};$("tmr").onclick=timerToggle;
+document.addEventListener("keydown",e=>{if((e.key==="p"||e.key==="P")&&!/INPUT|TEXTAREA/.test((e.target&&e.target.tagName)||"")&&$("player").hidden)timerToggle();});
 /* avançar a partir de qualquer tela (Enter sem foco e botão fixo) */
 function forward(){
   if(!$("player").hidden||!sheet.hidden||!rep.hidden)return;
+  if(!$("idle").hidden){$("idleKeep").click();return;}
   if(!$("board").hidden){$("bnext").click();return;}
   if(!pick.hidden){const b=!$("step0").hidden?$("behost"):!$("step1").hidden?$("toStep2"):$("start");if(b&&!b.disabled)b.click();return;}
   advance();
@@ -1525,6 +1587,9 @@ rebuild();
   if(!pick.hidden&&!$("step1").hidden){sel=null;rebuild();draft=all?new Set(cats().map(c=>c[0])):new Set(validSel());renderPick();}
   else if(pick.hidden===false){renderPick();}
 }catch(e){}})();
+function musicPhase(){if(!$("board").hidden)return "placar";if(!pick.hidden||!deck.length)return "intro";if(revealed)return "placar";
+  return (mode==="cel"&&mp.cph==="vote")?"apostas":"palpite";}
+setInterval(()=>SND.musicTick(),400);
 function fitPick(){const kids=[...pick.children].filter(e=>e.classList.contains("brand")||e.classList.contains("step"));
   kids.forEach(e=>e.style.zoom="");if(pick.hidden||innerWidth<=innerHeight)return;
   const avail=pick.clientHeight,need=pick.scrollHeight;if(need<=avail+2)return;
