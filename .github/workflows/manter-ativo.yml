@@ -10,6 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          curl -sf "COLE_AQUI_A_PROJECT_URL/rest/
+          curl -sf "https://uomljctodwpuhwwsiyzg.supabase.co/rest/
 v1/reportes?select=chave&limit=1" \
-            -H "apikey: COLE_AQUI_A_PUBLISHABLE_KEY" > /dev/null && echo "ok"
+            -H "apikey: sb_publishable_l9jZNEUdEi6bamiTJtSR7Q_RIjvBlYD" > /dev/null && echo "ok"
